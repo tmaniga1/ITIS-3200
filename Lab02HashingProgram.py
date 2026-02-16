@@ -1,95 +1,111 @@
-import os
 import hashlib
+import os
 import json
 
-HASH_TABLE_FILE = "hash_table.json"
+HASH_FILE = "hash_table.json"
 
-def hash_file(filepath):
-    """Calculates SHA-256 hash of a file."""
-    sha256 = hashlib.sha256()
+def calculate_sha256(filepath):
+    sha256_hash = hashlib.sha256()
     try:
         with open(filepath, "rb") as f:
-            while True:
-                chunk = f.read(4096)
-                if not chunk:
-                    break
-                sha256.update(chunk)
-        return sha256.hexdigest()
-    except IOError:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+    except FileNotFoundError:
         return None
 
-def traverse_directory(directory):
-    """Traverses a directory and hashes all files."""
-    hash_table = {}
+def generate_hash_table():
+    target_dir = input("Enter the directory path to hash: ").strip()
+    
+    if not os.path.exists(target_dir):
+        print("Error: Directory not found.")
+        return
 
-    for root, dirs, files in os.walk(directory):
+    hash_dict = {}
+    print(f"Scanning directory: {target_dir}...")
+    
+    for root, dirs, files in os.walk(target_dir):
         for file in files:
-            filepath = os.path.join(root, file)
-            file_hash = hash_file(filepath)
-            if file_hash:
-                hash_table[filepath] = file_hash
+            if file == HASH_FILE: 
+                continue
+            full_path = os.path.join(root, file)
+            file_hash = calculate_sha256(full_path)            
+            abs_path = os.path.abspath(full_path)
+            hash_dict[abs_path] = file_hash
 
-    return hash_table
-
-def generate_table():
-    """Generates a hash table and stores it in a JSON file."""
-    directory = input("Enter directory path to hash: ")
-
-    if not os.path.isdir(directory):
-        print("Invalid directory path.")
+    with open(HASH_FILE, 'w') as json_file:
+        json.dump(hash_dict, json_file, indent=4)
+        
+    print(f"Hash table generated successfully! Saved to '{HASH_FILE}'.")
+def verify_hashes():
+    if not os.path.exists(HASH_FILE):
+        print(f"Error: '{HASH_FILE}' not found. Please generate a table first.")
         return
+    with open(HASH_FILE, 'r') as json_file:
+        stored_hashes = json.load(json_file)
 
-    hash_table = traverse_directory(directory)
-
-    with open(HASH_TABLE_FILE, "w") as f:
-        json.dump(hash_table, f, indent=4)
-
-    print("Hash table generated.")
-
-def validate_hash():
-    """Validates current files against stored hash table."""
-    if not os.path.exists(HASH_TABLE_FILE):
-        print("No hash table found. Generate one first.")
+    print("\nVerifying hashes...")
+    current_files_found = set()
+    if not stored_hashes:
+        print("Hash table is empty.")
         return
-
-    with open(HASH_TABLE_FILE, "r") as f:
-        stored_hashes = json.load(f)
-
-    directory = input("Enter directory path to verify: ")
-    if not os.path.isdir(directory):
-        print("Invalid directory path.")
-        return
-
-    current_hashes = traverse_directory(directory)
-
-    # Check for modified or deleted files
-    for filepath, stored_hash in stored_hashes.items():
-        if filepath not in current_hashes:
-            print(f"{filepath} has been deleted.")
-        else:
-            if current_hashes[filepath] == stored_hash:
-                print(f"{filepath} hash is valid.")
+    sample_path = list(stored_hashes.keys())[0]
+    root_dir = os.path.dirname(sample_path) 
+    hash_to_old_path = {v: k for k, v in stored_hashes.items()}
+    missing_files = []
+    for file_path, stored_hash in stored_hashes.items():
+        if os.path.exists(file_path):
+            current_hash = calculate_sha256(file_path)
+            current_files_found.add(os.path.abspath(file_path))
+            
+            if current_hash == stored_hash:
+                print(f"[VALID] {file_path}")
             else:
-                print(f"{filepath} hash is INVALID.")
-
-    # Check for new files
-    for filepath in current_hashes:
-        if filepath not in stored_hashes:
-            print(f"{filepath} is a new file.")
+                print(f"[INVALID] {file_path} (Hash mismatch!)")
+        else:
+            missing_files.append((file_path, stored_hash))
+    common_path = os.path.commonpath(list(stored_hashes.keys()))
+    
+    for root, dirs, files in os.walk(common_path):
+        for file in files:
+            if file == HASH_FILE: continue
+            
+            full_path = os.path.abspath(os.path.join(root, file))
+            
+            if full_path not in stored_hashes:
+                current_hash = calculate_sha256(full_path)
+                rename_detected = False
+                for missing_path, missing_hash in missing_files:
+                    if current_hash == missing_hash:
+                        print(f"[RENAME DETECTED] '{os.path.basename(missing_path)}' "
+                              f"renamed to '{os.path.basename(full_path)}'")
+                        missing_files.remove((missing_path, missing_hash))
+                        rename_detected = True
+                        break
+                
+                if not rename_detected:
+                    print(f"[NEW FILE] {full_path}")
+    for missing_path, _ in missing_files:
+        print(f"[DELETED] {missing_path}")
 
 def main():
-    """Main program logic."""
-    print("1. Generate new hash table")
-    print("2. Verify hashes")
-
-    choice = input("Enter choice (1 or 2): ")
-
-    if choice == "1":
-        generate_table()
-    elif choice == "2":
-        validate_hash()
-    else:
-        print("Invalid choice.")
+    while True:
+        print("\n Lab 02 Hashing Program")
+        print("1. Generate new hash table")
+        print("2. Verify hashes")
+        print("3. Exit")
+        
+        choice = input("Select an option: ")
+        
+        if choice == '1':
+            generate_hash_table()
+        elif choice == '2':
+            verify_hashes()
+        elif choice == '3':
+            print("Exiting.")
+            break
+        else:
+            print("Invalid selection.")
 
 if __name__ == "__main__":
     main()
