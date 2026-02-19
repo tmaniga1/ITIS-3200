@@ -36,32 +36,32 @@ G = 2
 # Implement logic for PRNG function here
 class SecurePRNG:
     def __init__(self, seed_int):
-        # Initialize the PRNG internal state from the shared secret
-        # Convert the integer seed to bytes and hash to derive a fixed-size state
+        # Initialize the SecurePRNG from the DH shared secret integer.
+        # Convert the integer to bytes and derive a 32-byte state via SHA-256.
         seed_bytes = seed_int.to_bytes((seed_int.bit_length() + 7) // 8 or 1, "big")
-        self.state = hashlib.sha256(seed_bytes).digest()
-        # A simple counter to diversify keystream blocks if needed
+        self.state = hashlib.sha256(seed_bytes).digest()  # 32-byte internal state
+        # counter used to diversify keystream blocks
         self.counter = 0
 
     def generate(self, n_bytes):
-        # Generates n bytes while ensuring rollback/forward security.
-        # For each block: derive keystream = SHA256(state || counter),
-        # then immediately update state = SHA256(state || keystream).
+        # Produces n pseudorandom bytes. To ensure rollback resistance we
+        # immediately update the internal state after producing each block.
         output = b""
         block_size = hashlib.sha256().digest_size
         while len(output) < n_bytes:
             self.counter += 1
             ctr = self.counter.to_bytes(8, "big")
-            keystream_block = hashlib.sha256(self.state + ctr).digest()
-            # advance state immediately (one-way progression)
-            self.state = hashlib.sha256(self.state + keystream_block).digest()
-            output += keystream_block
+            # keystream block derived from current state and counter
+            keystream = hashlib.sha256(self.state + ctr).digest()
+            # immediately advance state in a one-way manner
+            self.state = hashlib.sha256(self.state + keystream).digest()
+            output += keystream
         return output[:n_bytes]
 
 def xor_crypt(data, prng):
-    # Simple XOR stream cipher: generate keystream of same length
+    # Simple XOR stream cipher using provided PRNG as keystream source.
     if prng is None:
-        raise ValueError("PRNG instance required for xor_crypt")
+        raise ValueError("PRNG required")
     ks = prng.generate(len(data))
     return bytes(a ^ b for a, b in zip(data, ks))
 
@@ -70,7 +70,7 @@ class Entity:
     # Each entity generates a DH private/public keypair on init
     def __init__(self, name):
         self.name = name
-        # private in range [2, P-2]
+        # private key in range [2, P-2]
         self.private_key = secrets.randbelow(P - 3) + 2
         self.public_key = pow(G, self.private_key, P)
         self.session_prng = None
@@ -103,7 +103,7 @@ class Network:
 # Implement logic for Mallory
 class Mallory:
     def __init__(self):
-        # Mallory generates her own DH keypair so she can perform MITM
+        # Mallory generates her own DH keypair to perform MITM
         self.private_key = secrets.randbelow(P - 3) + 2
         self.public_hex = hex(pow(G, self.private_key, P))
 
@@ -116,36 +116,37 @@ class Mallory:
         if isinstance(payload, str) and payload.startswith("0x"):
             remote_pub = int(payload, 16)
             my_shared_secret = pow(remote_pub, self.private_key, P)
+            # create the session PRNG for the sender side
             if sender == "Alice":
-                # session between Mallory and Alice
                 self.alice_prng = SecurePRNG(my_shared_secret)
             elif sender == "Bob":
-                # session between Mallory and Bob
                 self.bob_prng = SecurePRNG(my_shared_secret)
 
-            # Return Mallory's public value so the sender thinks they're talking to the other party
+            # return Mallory's public key so the sender ends up using Mallory
             return self.public_hex
 
-        # 2. Implement Logic for Message Interception/Modification
+        # 2. Message interception/modification
         if isinstance(payload, bytes):
             print(f"[MALLORY] Intercepting Encrypted Message from {sender}...")
             # If Alice sent the message, decrypt with alice_prng and re-encrypt with bob_prng
             if sender == "Alice" and self.alice_prng and self.bob_prng:
                 plaintext = xor_crypt(payload, self.alice_prng)
                 print(f"[MALLORY] Spied plaintext: {plaintext}")
-                # Example modification: change meeting time "9pm" -> "3am"
-                modified = plaintext.replace(b"9pm", b"3am")
-                if modified != plaintext:
+                # modify the message (example: change time)
+                if b"9pm" in plaintext:
+                    modified = plaintext.replace(b"9pm", b"3am")
                     print("[MALLORY] Modified message content")
-                reencrypted = xor_crypt(modified, self.bob_prng)
-                return reencrypted
+                else:
+                    modified = plaintext
+                reenc = xor_crypt(modified, self.bob_prng)
+                return reenc
 
-            # If Bob sent the message, decrypt with bob_prng and re-encrypt with alice_prng
+            # If Bob sent the message back, decrypt with bob_prng and re-encrypt with alice_prng
             if sender == "Bob" and self.bob_prng and self.alice_prng:
                 plaintext = xor_crypt(payload, self.bob_prng)
                 print(f"[MALLORY] Spied plaintext from Bob: {plaintext}")
-                reencrypted = xor_crypt(plaintext, self.alice_prng)
-                return reencrypted
+                reenc = xor_crypt(plaintext, self.alice_prng)
+                return reenc
 
         return payload
 
