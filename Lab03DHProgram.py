@@ -2,7 +2,7 @@ import hashlib
 import secrets
 import os
 
-
+# This code uses Copilot AI
 # --- UI HELPER FUNCTIONS ---
 def print_header(text):
     print(f"\n{'='*60}\n{text}\n{'='*60}")
@@ -236,5 +236,6 @@ def main():
     if b"3am" in final_message:
         print("\n[DANGER] MITM SUCCESS: Mallory used her private key (m) to decrypt and re-encrypt.")
 
-    if __name__ == "__main__":
-        main()
+
+if __name__ == "__main__":
+    main()
