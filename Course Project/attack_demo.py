@@ -4,6 +4,27 @@ import bcrypt
 import time
 import requests
 
+def register_test_users():
+    print("Registering test users...")
+    test_users = [
+        {"username": "alice", "password": "password123"},
+        {"username": "bob", "password": "letmein"},
+        {"username": "carol", "password": "sunshine"}
+    ]
+    for user in test_users:
+        # Register on insecure server
+        try:
+            response = requests.post("http://localhost:5000/register", json=user)
+            print(f"Insecure: {response.json()}")
+        except:
+            print("Insecure server not running or error registering")
+        # Register on secure server
+        try:
+            response = requests.post("http://localhost:5001/register", json=user)
+            print(f"Secure: {response.json()}")
+        except:
+            print("Secure server not running or error registering")
+
 def dictionary_attack_insecure():
     print("\n=== ATTACK 1: Dictionary Attack on Insecure System (SHA-256, no salt) ===")
     conn = sqlite3.connect("insecure_users.db")
@@ -94,6 +115,7 @@ def timing_attack():
 
 if __name__ == "__main__":
     print("Starting attack demo...")
+    register_test_users()
     dictionary_attack_insecure()
     dictionary_attack_secure()
     timing_attack()
