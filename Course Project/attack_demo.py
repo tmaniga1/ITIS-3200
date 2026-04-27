@@ -3,6 +3,7 @@ import sqlite3
 import bcrypt
 import time
 import requests
+import os
 
 def register_test_users():
     print("Registering test users...")
@@ -32,7 +33,8 @@ def dictionary_attack_insecure():
     if not rows:
         print("No users in insecure database. Register some users first.")
         return
-    with open("wordlist.txt", "r", encoding="utf-8", errors="ignore") as f:
+    wordlist_path = os.path.join(os.path.dirname(__file__), "wordlist.txt")
+    with open(wordlist_path, "r", encoding="utf-8", errors="ignore") as f:
         wordlist = [line.strip() for line in f.readlines()]
     cracked = 0
     start = time.time()
@@ -53,7 +55,8 @@ def dictionary_attack_secure():
     if not rows:
         print("No users in secure database. Register some users first.")
         return
-    with open("wordlist.txt", "r", encoding="utf-8", errors="ignore") as f:
+    wordlist_path = os.path.join(os.path.dirname(__file__), "wordlist.txt")
+    with open(wordlist_path, "r", encoding="utf-8", errors="ignore") as f:
         wordlist = [line.strip() for line in f.readlines()[:50]]
     cracked = 0
     start = time.time()
